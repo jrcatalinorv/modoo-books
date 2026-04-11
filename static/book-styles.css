@@ -1,0 +1,604 @@
+/**
+ * book-styles.css
+ * ──────────────────────────────────────────────────────────────────
+ * Estilos Web-to-Print cargados por Paged.js en el cliente.
+ * Este archivo NO se procesa por Vite/Svelte; va en /static/ para
+ * que Paged.js lo pueda referenciar como URL absoluta.
+ *
+ * Estructura de páginas físicas:
+ *   Pág 1  → Portada          (page: front-matter, sin numeración)
+ *   Pág 2  → Blanco/Verso     (page: front-matter, sin numeración)
+ *   Pág 3  → Página de título (page: front-matter, sin numeración)
+ *   Pág 4  → TOC              (page: front-matter, sin numeración)
+ *   Pág 5+ → Contenido        (counter-reset: page 1 → muestra "1")
+ * ──────────────────────────────────────────────────────────────────
+ */
+
+/* ================================================================
+   VARIABLES CSS — controlan tema claro/oscuro vía data-variant
+   ================================================================ */
+
+:root {
+  /* Tipografía */
+  --font-heading : 'Georgia', 'Times New Roman', serif;
+  --font-body    : 'Georgia', 'Times New Roman', serif;
+  --font-ui      : 'Helvetica Neue', Arial, sans-serif;
+
+  /* Colores (tema claro — default) */
+  --color-text     : #1a1a1a;
+  --color-heading  : #0d0d0d;
+  --color-bg       : #ffffff;
+  --color-accent   : #1d4e89;
+  --color-muted    : #666666;
+  --color-border   : #dedede;
+  --color-page-num : #888888;
+
+  /* Tipometría */
+  --size-body   : 10.5pt;
+  --size-h1     : 22pt;
+  --size-h2     : 15pt;
+  --size-h3     : 12.5pt;
+  --size-small  : 8.5pt;
+  --lead        : 1.65;
+
+  /* Imagen de fondo (se sobreescribe inline desde el componente) */
+  --bg-image: none;
+}
+
+/* Variante oscura: cualquier elemento con data-variant="dark"  */
+[data-variant="dark"] {
+  --color-text     : #eeeeee;
+  --color-heading  : #ffffff;
+  --color-bg       : #141414;
+  --color-accent   : #7ab8e8;
+  --color-muted    : #aaaaaa;
+  --color-border   : #333333;
+  --color-page-num : rgba(255, 255, 255, 0.70);
+}
+
+/* ================================================================
+   RESET MÍNIMO
+   ================================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* ================================================================
+   REGLAS @PAGE — Paged.js
+   ================================================================ */
+
+/* ── Página de contenido (default) ───────────────────────────── */
+@page {
+  size: A5;                         /* 148mm × 210mm               */
+  margin-top    : 22mm;
+  margin-bottom : 28mm;
+  margin-left   : 22mm;             /* cosido/interior              */
+  margin-right  : 18mm;             /* corte/exterior               */
+
+  /* Encabezado corriente: título del capítulo actual              */
+  @top-center {
+    content     : string(running-chapter);
+    font-family : var(--font-ui);
+    font-size   : 7.5pt;
+    font-style  : italic;
+    color       : var(--color-page-num);
+    margin-top  : 8mm;
+  }
+
+  /* Pie de página: número de página centrado                      */
+  @bottom-center {
+    content        : counter(page);
+    font-family    : var(--font-ui);
+    font-size      : var(--size-small);
+    color          : var(--color-page-num);
+    margin-bottom  : 10mm;
+    letter-spacing : 0.05em;
+  }
+}
+
+/* ── Páginas recto (impares) ─────────────────────────────────── */
+@page :right {
+  margin-left  : 25mm;              /* más espacio en el lomo       */
+  margin-right : 16mm;
+
+  @bottom-right  { content: counter(page); font-family: var(--font-ui); font-size: var(--size-small); color: var(--color-page-num); margin-bottom: 10mm; }
+  @bottom-center { content: none; }
+  @top-center    { content: string(running-chapter); font-family: var(--font-ui); font-size: 7.5pt; font-style: italic; color: var(--color-page-num); margin-top: 8mm; }
+}
+
+/* ── Páginas verso (pares) ───────────────────────────────────── */
+@page :left {
+  margin-left  : 16mm;
+  margin-right : 25mm;
+
+  @bottom-left   { content: counter(page); font-family: var(--font-ui); font-size: var(--size-small); color: var(--color-page-num); margin-bottom: 10mm; }
+  @bottom-center { content: none; }
+  @top-center    { content: string(running-book); font-family: var(--font-ui); font-size: 7.5pt; font-style: italic; color: var(--color-page-num); margin-top: 8mm; }
+}
+
+/* ── Front-matter: sin numeración visible ────────────────────── */
+@page front-matter {
+  size   : A5;
+  margin : 0;                       /* control total desde el CSS de clase */
+
+  @top-center    { content: none; }
+  @top-left      { content: none; }
+  @top-right     { content: none; }
+  @bottom-center { content: none; }
+  @bottom-left   { content: none; }
+  @bottom-right  { content: none; }
+}
+
+/* ── Páginas completamente en blanco (verso en blanco) ───────── */
+@page :blank {
+  @top-center    { content: none; }
+  @bottom-center { content: none; }
+  @bottom-left   { content: none; }
+  @bottom-right  { content: none; }
+}
+
+/* ── Páginas con imagen de fondo total (Layout: FullImage) ────── */
+@page full-image {
+  size   : A5;
+  margin : 0;
+
+  @top-center    { content: none; }
+  @bottom-center { content: none; }
+  @bottom-left   { content: none; }
+  @bottom-right  { content: none; }
+}
+
+/* ================================================================
+   TIPOGRAFÍA BASE
+   ================================================================ */
+
+/* Tipografía scoped a .pagedjs_pagebox para NO contaminar el body de la app.
+   Paged.js inyecta este CSS en el <head> del documento; si usáramos
+   "body { ... }" aquí, rompería el layout de la UI (toolbar, grid, etc.). */
+.pagedjs_pagebox {
+  font-family        : var(--font-body);
+  font-size          : var(--size-body);
+  line-height        : var(--lead);
+  color              : var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering     : optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family : var(--font-heading);
+  color       : var(--color-heading);
+  line-height : 1.2;
+  break-after : avoid;
+}
+
+h1 { font-size: var(--size-h1); margin: 0 0 6mm; }
+h2 { font-size: var(--size-h2); margin: 8mm 0 3mm; }
+h3 { font-size: var(--size-h3); margin: 6mm 0 2mm; }
+
+/* Título de capítulo registra el string-set para el running header */
+.book-content h1 {
+  string-set    : running-chapter content(text);
+  break-before  : page;
+  margin-top    : 16mm;
+  padding-bottom: 4mm;
+  border-bottom : 0.75pt solid var(--color-border);
+}
+
+p {
+  margin   : 0 0 0.7em;
+  text-align: justify;
+  hyphens  : auto;
+  -webkit-hyphens: auto;
+  orphans  : 3;
+  widows   : 3;
+}
+
+/* Párrafo que sigue inmediatamente a un h — sin sangría extra */
+h1 + p, h2 + p, h3 + p { margin-top: 0; }
+
+a { color: var(--color-accent); text-decoration: underline; }
+
+strong { font-weight: 700; }
+em     { font-style : italic; }
+
+blockquote {
+  margin       : 5mm 0 5mm 8mm;
+  padding-left : 5mm;
+  border-left  : 2.5pt solid var(--color-accent);
+  font-style   : italic;
+  color        : var(--color-muted);
+  break-inside : avoid;
+}
+
+code {
+  font-family : 'Courier New', Courier, monospace;
+  font-size   : 8.5pt;
+  background  : rgba(0,0,0,0.06);
+  padding     : 0.1em 0.3em;
+  border-radius: 2px;
+}
+
+pre {
+  background   : rgba(0,0,0,0.06);
+  padding      : 4mm;
+  font-size    : 8pt;
+  line-height  : 1.45;
+  break-inside : avoid;
+  overflow     : hidden;
+  white-space  : pre-wrap;
+  word-break   : break-word;
+}
+
+pre code { background: none; padding: 0; }
+
+hr {
+  border     : none;
+  border-top : 0.75pt solid var(--color-border);
+  margin     : 8mm 0;
+}
+
+ul, ol {
+  padding-left: 6mm;
+  margin      : 0 0 0.75em;
+}
+
+li { margin-bottom: 0.25em; }
+
+img {
+  max-width    : 100%;
+  height       : auto;
+  break-inside : avoid;
+  display      : block;
+}
+
+figure {
+  margin       : 6mm 0;
+  break-inside : avoid;
+}
+
+figcaption {
+  font-size   : 8pt;
+  font-style  : italic;
+  text-align  : center;
+  margin-top  : 2mm;
+  color       : var(--color-muted);
+}
+
+table {
+  width          : 100%;
+  border-collapse: collapse;
+  font-size      : 9pt;
+  break-inside   : avoid;
+  margin         : 6mm 0;
+}
+
+th {
+  background  : var(--color-accent);
+  color       : #fff;
+  padding     : 2mm 3mm;
+  font-family : var(--font-ui);
+  font-size   : 8.5pt;
+  text-align  : left;
+}
+
+td {
+  padding      : 2mm 3mm;
+  border-bottom: 0.5pt solid var(--color-border);
+}
+
+tr:nth-child(even) td { background: rgba(0,0,0,0.025); }
+
+/* ================================================================
+   LAYOUT: PORTADA  (página física 1 — front-matter)
+   ================================================================ */
+
+.page-cover {
+  page        : front-matter;
+  break-after : page;
+
+  /* Ocupa exactamente el área de página A5 sin márgenes */
+  width       : 148mm;
+  height      : 210mm;
+
+  display       : flex;
+  align-items   : flex-end;
+  justify-content: flex-start;
+  padding       : 14mm 18mm;
+
+  /* Gradient oscuro como fallback cuando no hay imagen de portada.
+     Si el frontmatter define coverImage, --bg-image sobreescribe el gradient. */
+  background-color  : #0d1117;
+  background-image  : var(--bg-image,
+                        linear-gradient(160deg, #1a1a2e 0%, #16213e 45%, #0f3460 100%));
+  background-size   : cover;
+  background-position: center;
+  position          : relative;
+  overflow          : hidden;
+}
+
+/* Gradiente de oscurecimiento en portadas con imagen */
+.page-cover::before {
+  content  : '';
+  position : absolute;
+  inset    : 0;
+  background: linear-gradient(
+    to top,
+    rgba(0,0,0,0.72) 0%,
+    rgba(0,0,0,0.15) 55%,
+    transparent      100%
+  );
+  pointer-events: none;
+}
+
+.cover-content {
+  position : relative;
+  z-index  : 1;
+}
+
+/* La portada siempre tiene fondo oscuro (imagen o gradient),
+   por lo que el texto es siempre blanco. */
+.cover-content {
+  color: #ffffff;
+}
+
+.cover-title {
+  font-size  : 26pt;
+  font-family: var(--font-heading);
+  margin     : 0 0 3mm;
+  line-height: 1.1;
+  color      : inherit;
+}
+
+.cover-subtitle {
+  font-size  : 12pt;
+  font-style : italic;
+  margin     : 0 0 5mm;
+  opacity    : 0.88;
+  color      : inherit;
+}
+
+.cover-author {
+  font-size      : 10pt;
+  font-family    : var(--font-ui);
+  letter-spacing : 0.1em;
+  text-transform : uppercase;
+  margin         : 0;
+  opacity        : 0.85;
+  color          : inherit;
+}
+
+/* ================================================================
+   VERSO EN BLANCO (página física 2 — front-matter)
+   ================================================================ */
+
+.page-blank {
+  page        : front-matter;
+  break-after : page;
+  width       : 148mm;
+  height      : 210mm;
+}
+
+/* ================================================================
+   PÁGINA DE TÍTULO (página física 3 — front-matter)
+   ================================================================ */
+
+.page-title {
+  page        : front-matter;
+  break-after : page;
+  width       : 148mm;
+  height      : 210mm;
+  display     : flex;
+  align-items : center;
+  justify-content: center;
+  padding     : 20mm;
+  text-align  : center;
+  background  : var(--color-bg);
+  /* Borde superior de color como elemento distintivo */
+  border-top  : 5pt solid var(--color-accent);
+}
+
+.title-page-content {
+  max-width   : 100%;
+  padding-top : 8mm;
+  border-top  : 0.5pt solid var(--color-border);
+}
+
+.title-page-main {
+  font-size    : 22pt;
+  margin-bottom: 8mm;
+  color        : var(--color-heading);
+  line-height  : 1.15;
+}
+
+.title-page-sub {
+  font-size  : 12pt;
+  font-style : italic;
+  color      : var(--color-muted);
+  margin     : 0 0 8mm;
+}
+
+.title-page-author {
+  font-size      : 10pt;
+  font-family    : var(--font-ui);
+  letter-spacing : 0.08em;
+  text-transform : uppercase;
+  color          : var(--color-muted);
+  margin         : 0;
+}
+
+/* ================================================================
+   TABLA DE CONTENIDOS (página física 4 — front-matter)
+   ================================================================ */
+
+.toc {
+  page        : front-matter;
+  break-after : page;
+  width       : 148mm;
+  min-height  : 210mm;
+  padding     : 22mm 18mm 18mm;
+  background  : var(--color-bg);
+}
+
+.toc-title {
+  font-size    : 17pt;
+  font-family  : var(--font-heading);
+  color        : var(--color-heading);
+  margin       : 0 0 7mm;
+  padding-bottom: 3mm;
+  border-bottom : 0.75pt solid var(--color-border);
+  /* Evitar que este h2 setee el running-chapter */
+  string-set   : running-chapter "";
+}
+
+.toc-list {
+  list-style : none;
+  padding    : 0;
+  margin     : 0;
+}
+
+.toc-entry {
+  display      : flex;
+  align-items  : baseline;
+  margin-bottom: 2.5mm;
+  break-inside : avoid;
+}
+
+.toc-entry a {
+  display         : flex;
+  width           : 100%;
+  align-items     : baseline;
+  text-decoration : none;
+  color           : var(--color-text);
+  gap             : 2mm;
+}
+
+/* Número de página generado por Paged.js via target-counter */
+.toc-entry a::after {
+  content              : target-counter(attr(href url), page);
+  margin-left          : auto;
+  padding-left         : 4mm;
+  font-family          : var(--font-ui);
+  font-size            : 9pt;
+  color                : var(--color-muted);
+  font-variant-numeric : tabular-nums;
+  white-space          : nowrap;
+}
+
+/* Puntitos de relleno entre título y número */
+.toc-dots {
+  flex        : 1;
+  border-bottom: 0.75pt dotted var(--color-border);
+  margin-bottom: 1.5mm;
+  min-width   : 8mm;
+}
+
+.toc-level-1 {
+  font-size  : 10.5pt;
+  font-weight: 600;
+  margin-top : 2mm;
+}
+
+.toc-level-2 {
+  font-size  : 9.5pt;
+  padding-left: 7mm;
+  color      : var(--color-muted);
+}
+
+/* ================================================================
+   CONTENIDO DEL LIBRO
+   Empieza en página física 5 → se muestra como página "1"
+   ================================================================ */
+
+.content-start {
+  /**
+   * counter-reset: page 1
+   * Paged.js incrementa el counter ANTES de mostrarlo,
+   * por lo que la primera página de esta sección mostrará "1".
+   * Las 4 páginas de front-matter no muestran número (page: front-matter).
+   */
+  counter-reset: page 1;
+  break-before : page;
+}
+
+.book-content {
+  /* Si se definió backgroundImage global para el layout FullImage */
+  background-image   : var(--bg-image, none);
+  background-size    : cover;
+  background-position: center;
+}
+
+/* Controles de salto de página en el contenido */
+.page-break  { break-before: page; }
+.avoid-break { break-inside: avoid; }
+
+/* ================================================================
+   LAYOUT: FULLIMAGE — páginas de imagen de fondo total
+   ================================================================ */
+
+/* Bloque especial dentro del contenido que ocupa página completa */
+.page-full-image {
+  page         : full-image;
+  break-before : page;
+  break-after  : page;
+
+  width        : 148mm;
+  height       : 210mm;
+  margin       : 0;
+  padding      : 16mm;
+
+  display      : flex;
+  align-items  : center;
+  justify-content: center;
+  text-align   : center;
+
+  background-image   : var(--bg-image);
+  background-size    : cover;
+  background-position: center;
+  position           : relative;
+  overflow           : hidden;
+}
+
+.page-full-image::before {
+  content   : '';
+  position  : absolute;
+  inset     : 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.page-full-image > * {
+  position: relative;
+  z-index : 1;
+  color   : #ffffff;
+}
+
+.page-full-image h1,
+.page-full-image h2,
+.page-full-image p {
+  color: #ffffff;
+}
+
+/* ================================================================
+   NOTAS AL PIE (Paged.js las gestiona con @footnote)
+   ================================================================ */
+
+.footnote {
+  float        : footnote;
+  font-size    : 8pt;
+  line-height  : 1.4;
+  color        : var(--color-muted);
+  padding-top  : 2mm;
+  border-top   : 0.5pt solid var(--color-border);
+}
+
+/* ================================================================
+   IMPRESIÓN — ocultar UI shell, mostrar solo el libro
+   ================================================================ */
+
+@media print {
+  /* Paged.js ya maneja el layout al imprimir; ocultamos la UI */
+  .toolbar,
+  .loading-state {
+    display: none !important;
+  }
+}
