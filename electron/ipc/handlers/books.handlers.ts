@@ -30,6 +30,7 @@
 
 import { ipcMain } from 'electron';
 import { BookRepo, SectionRepo, BlockRepo } from '../../database/repositories/index';
+import { removeBookMediaFolder } from './assets.handlers';
 import type { CreateBookProjectInput, UpdateBookProjectInput } from '../../../src/lib/core/domain/book';
 import type { CreateSectionInput, UpdateSectionInput } from '../../../src/lib/core/domain/section';
 import type { CreateBlockInput, UpdateBlockInput } from '../../../src/lib/core/domain/block';
@@ -70,7 +71,11 @@ export function registerBooksHandlers(): void {
   );
 
   ipcMain.handle('books:delete', (_event, id: string) =>
-    safe(() => ({ deleted: BookRepo.deleteBook(id) }))
+    safe(() => {
+      const deleted = BookRepo.deleteBook(id);
+      if (deleted) removeBookMediaFolder(id);
+      return { deleted };
+    })
   );
 
   ipcMain.handle('books:count', () =>

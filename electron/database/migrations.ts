@@ -16,6 +16,7 @@
  *   v4 — Valores section_type normalizados a SCREAMING_SNAKE_CASE (p. ej. CHAPTER)
  *   v5 — Tipos de bloque v1; document_blocks sin CHECK en block_type; datos migrados
  *   v6 — style_variant ampliado (variantes editoriales PARTE 7)
+ *   v7 — assets: caption + tipo image (PARTE 8)
  */
 
 import type { Database } from 'sql.js';
@@ -517,6 +518,72 @@ const migrations: Migration[] = [
       `);
 
       console.log('[DB] v6: style_variant ampliado (PARTE 7).');
+    },
+  },
+
+  // ─── v7: Assets — caption y tipo `image` (PARTE 8) ───────────────────────
+  {
+    version: 7,
+    name: 'assets_caption_image_type',
+    up(db) {
+      db.run('ALTER TABLE assets RENAME TO _bkp_assets_v7');
+
+      db.run(`
+        CREATE TABLE assets (
+          id              TEXT PRIMARY KEY,
+          book_id         TEXT NOT NULL REFERENCES book_projects(id) ON DELETE CASCADE,
+          asset_type      TEXT NOT NULL DEFAULT 'image'
+            CHECK(asset_type IN (
+              'image','cover_image','illustration','font','background','logo','other'
+            )),
+          filename        TEXT NOT NULL,
+          original_name   TEXT NOT NULL,
+          mime_type       TEXT NOT NULL DEFAULT '',
+          file_ext        TEXT NOT NULL DEFAULT '',
+          file_size_bytes INTEGER NOT NULL DEFAULT 0,
+          width_px        INTEGER,
+          height_px       INTEGER,
+          storage_path    TEXT NOT NULL,
+          checksum        TEXT NOT NULL DEFAULT '',
+          alt_text        TEXT NOT NULL DEFAULT '',
+          caption         TEXT NOT NULL DEFAULT '',
+          created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+
+      db.run(`
+        INSERT INTO assets
+          (id, book_id, asset_type, filename, original_name, mime_type, file_ext,
+           file_size_bytes, width_px, height_px, storage_path, checksum, alt_text,
+           caption, created_at, updated_at)
+        SELECT
+          id, book_id,
+          CASE lower(asset_type)
+            WHEN 'cover_image' THEN 'cover_image'
+            WHEN 'illustration' THEN 'illustration'
+            WHEN 'font' THEN 'font'
+            WHEN 'background' THEN 'background'
+            WHEN 'logo' THEN 'logo'
+            WHEN 'other' THEN 'other'
+            ELSE 'image'
+          END,
+          filename, original_name, mime_type, file_ext, file_size_bytes, width_px, height_px,
+          storage_path, checksum, alt_text, '', created_at, updated_at
+        FROM _bkp_assets_v7
+      `);
+
+      db.run('DROP TABLE _bkp_assets_v7');
+
+      db.run(`CREATE INDEX IF NOT EXISTS idx_assets_book_id ON assets(book_id, asset_type)`);
+
+      db.run(`
+        INSERT OR REPLACE INTO app_settings (key, value) VALUES
+          ('appVersion',    '0.7.0'),
+          ('schemaVersion', '7')
+      `);
+
+      console.log('[DB] v7: assets caption + image (PARTE 8).');
     },
   },
 

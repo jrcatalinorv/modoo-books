@@ -24,6 +24,8 @@ import type {
   DocumentBlock,
   CreateBlockInput,
   UpdateBlockInput,
+  Asset,
+  UpdateAssetInput,
 } from '$lib/core/domain/index';
 import { asBookProjectId, DEFAULT_BOOK_STATUS, DEFAULT_LANGUAGE_CODE } from '$lib/core/domain/index';
 import { asSectionId } from '$lib/core/domain/section';
@@ -175,5 +177,24 @@ export class WebAdapter implements IPlatformAdapter {
   }
   reorderBlocks(_sectionId: string, _ids: string[]): Promise<void> {
     return Promise.resolve();
+  }
+
+  listAssetsByBook(_bookId: string): Promise<Asset[]> {
+    return Promise.resolve([]);
+  }
+  getAssetById(_id: string): Promise<Asset | null> {
+    return Promise.resolve(null);
+  }
+  updateAsset(_id: string, _input: UpdateAssetInput): Promise<Asset | null> {
+    return Promise.resolve(null);
+  }
+  deleteAsset(_id: string): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+  pickAndImportAssets(_bookId: string): Promise<Asset[]> {
+    return Promise.reject(new Error('WebAdapter: assets solo en Electron (PARTE 8).'));
+  }
+  importAssetFiles(_bookId: string, _paths: string[]): Promise<Asset[]> {
+    return Promise.reject(new Error('WebAdapter: assets solo en Electron (PARTE 8).'));
   }
 }

@@ -43,7 +43,7 @@
   const modules = [
     { id: 'overview', label: 'Descripción',  icon: '📋', implemented: true },
     { id: 'content',  label: 'Contenido',    icon: '✏️',  implemented: true },
-    { id: 'assets',   label: 'Assets',       icon: '🖼️',  implemented: false },
+    { id: 'assets',   label: 'Assets',       icon: '🖼️',  implemented: true },
     { id: 'styles',   label: 'Estilos',      icon: '🎨',  implemented: false },
     { id: 'layout',   label: 'Maqueta',      icon: '📐',  implemented: false },
     { id: 'preview',  label: 'Vista previa', icon: '👁️',  implemented: false },

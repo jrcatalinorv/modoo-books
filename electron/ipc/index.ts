@@ -21,12 +21,14 @@ import { registerAppHandlers }   from './handlers/app.handlers';
 import { registerDbHandlers }    from './handlers/db.handlers';
 import { registerFsHandlers }    from './handlers/fs.handlers';
 import { registerBooksHandlers } from './handlers/books.handlers';
+import { registerAssetHandlers } from './handlers/assets.handlers';
 
 export function registerAllHandlers(): void {
   registerAppHandlers();
   registerDbHandlers();
   registerFsHandlers();
   registerBooksHandlers();
+  registerAssetHandlers();
 
   console.log('[IPC] Todos los handlers registrados.');
 }

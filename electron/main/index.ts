@@ -15,10 +15,23 @@
  *   - Lógica de negocio → src/lib/core/
  */
 
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, protocol, shell } from 'electron';
 import { join } from 'path';
 import { openDatabase, closeDatabase } from '../database/connection';
 import { registerAllHandlers } from '../ipc/index';
+import { registerMidooMediaProtocol } from './register-media-protocol';
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme:     'midoo-media',
+    privileges: {
+      standard:         true,
+      secure:           true,
+      supportFetchAPI:  true,
+      corsEnabled:      true,
+    },
+  },
+]);
 
 // Detectar si estamos en modo desarrollo
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -101,7 +114,10 @@ app.whenReady().then(async () => {
   // 2. Registrar todos los handlers IPC
   registerAllHandlers();
 
-  // 3. Crear la ventana principal
+  // 3. Protocolo local para servir imágenes del libro (PARTE 8)
+  registerMidooMediaProtocol();
+
+  // 4. Crear la ventana principal
   createWindow();
 
   // macOS: re-crear ventana al hacer clic en el ícono del dock

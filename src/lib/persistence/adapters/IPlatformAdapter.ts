@@ -17,6 +17,8 @@ import type {
   DocumentBlock,
   CreateBlockInput,
   UpdateBlockInput,
+  Asset,
+  UpdateAssetInput,
 } from '$lib/core/domain/index';
 
 /** Respuesta genérica de un error IPC serializado. */
@@ -59,4 +61,13 @@ export interface IPlatformAdapter {
   updateBlock(id: string, input: UpdateBlockInput):       Promise<DocumentBlock | null>;
   deleteBlock(id: string):                                Promise<boolean>;
   reorderBlocks(sectionId: string, ids: string[]):        Promise<void>;
+
+  // ── Assets (imágenes por libro) — PARTE 8 ─────────────────────────────────
+  listAssetsByBook(bookId: string):                       Promise<Asset[]>;
+  getAssetById(id: string):                               Promise<Asset | null>;
+  updateAsset(id: string, input: UpdateAssetInput):       Promise<Asset | null>;
+  deleteAsset(id: string):                              Promise<boolean>;
+  /** Diálogo nativo: importa una o varias imágenes al libro. */
+  pickAndImportAssets(bookId: string):                    Promise<Asset[]>;
+  importAssetFiles(bookId: string, paths: string[]):     Promise<Asset[]>;
 }

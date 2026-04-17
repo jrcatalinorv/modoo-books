@@ -18,6 +18,7 @@ export function asBlockId(id: string): BlockId {
 export const BLOCK_TYPE_VALUES = [
   'HEADING_1',
   'HEADING_2',
+  'CHAPTER_OPENING',
   'PARAGRAPH',
   'QUOTE',
   'IMAGE',
@@ -46,6 +47,7 @@ export function normalizeBlockType(raw: string): BlockType {
     separator: 'SEPARATOR',
     page_break: 'PAGE_BREAK',
     centered_phrase: 'CENTERED_PHRASE',
+    chapter_opening: 'CHAPTER_OPENING',
     heading: 'HEADING_1',
     divider: 'SEPARATOR',
     code: 'PARAGRAPH',

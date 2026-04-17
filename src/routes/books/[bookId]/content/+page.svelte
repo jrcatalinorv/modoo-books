@@ -47,12 +47,33 @@
     type BlockTextAlign,
     type BlockWidthMode,
     type BlockEmphasis,
+    parseImageBlockContent,
+    serializeImageBlockContent,
+    parseChapterOpeningContent,
+    serializeChapterOpeningContent,
+    EMPTY_CHAPTER_OPENING_CONTENT,
+    CHAPTER_OPENING_TEXT_POSITION_VALUES,
+    CHAPTER_OPENING_TEXT_ALIGN_VALUES,
+    CHAPTER_OPENING_TEXT_COLOR_MODE_VALUES,
+    chapterOpeningPreviewRootClassNames,
+    chapterOpeningTextPositionLabel,
+    chapterOpeningTextAlignLabel,
+    chapterOpeningTextColorModeLabel,
+    type ChapterOpeningTextPosition,
+    type ChapterOpeningTextAlign,
+    type ChapterOpeningTextColorMode,
   } from '$lib/services/content.service';
+  import {
+    listAssets,
+    pickAndImportAssets,
+    assetDisplayUrl,
+  } from '$lib/services/assets.service';
   import SectionTypeSelect from '$lib/components/SectionTypeSelect.svelte';
   import BookMarkdownImportModal from '$lib/components/BookMarkdownImportModal.svelte';
   import type {
     DocumentSection, SectionType,
     DocumentBlock,   BlockType, BlockStyleVariant,
+    Asset,
   } from '$lib/core/domain/index';
   import { DEFAULT_SECTION_TYPE, DEFAULT_BLOCK_TYPE } from '$lib/core/domain/index';
 
@@ -146,13 +167,85 @@
   let insp_bWidthMode      = $state<BlockWidthMode>('full');
   let insp_bEmphasis       = $state<BlockEmphasis>('normal');
 
+  let insp_bImageAssetId   = $state('');
+  let insp_bImageAlt       = $state('');
+  let insp_bImageCaption   = $state('');
+
+  let insp_bCoLabel          = $state('');
+  let insp_bCoTitle          = $state('');
+  let insp_bCoAssetId        = $state('');
+  let insp_bCoTextPosition   = $state<ChapterOpeningTextPosition>('bottom-left');
+  let insp_bCoTextAlign      = $state<ChapterOpeningTextAlign>('left');
+  let insp_bCoOverlay        = $state(true);
+  let insp_bCoTextColorMode  = $state<ChapterOpeningTextColorMode>('light');
+
+  let bookAssets           = $state<Asset[]>([]);
+
   // Suciedad del inspector
   let inspectorDirty = $state(false);
 
   // ── Carga inicial ─────────────────────────────────────────────────────────
   onMount(async () => {
     await loadSections();
+    await loadBookAssets();
   });
+
+  $effect(() => {
+    if (bookId) void loadBookAssets();
+  });
+
+  async function loadBookAssets() {
+    try {
+      bookAssets = await listAssets(bookId);
+    } catch {
+      bookAssets = [];
+    }
+  }
+
+  async function importImagesForBlock() {
+    try {
+      const added = await pickAndImportAssets(bookId);
+      await loadBookAssets();
+      if (added.length > 0) {
+        const lastId = added[added.length - 1].id;
+        if (insp_bType === 'IMAGE') {
+          insp_bImageAssetId = lastId;
+          markInspectorDirty();
+        } else if (insp_bType === 'CHAPTER_OPENING') {
+          insp_bCoAssetId = lastId;
+          markInspectorDirty();
+        }
+      }
+    } catch (e) {
+      globalError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  function resetChapterOpeningInspector() {
+    const d = EMPTY_CHAPTER_OPENING_CONTENT;
+    insp_bCoLabel         = d.chapterLabel;
+    insp_bCoTitle         = d.title;
+    insp_bCoAssetId       = '';
+    insp_bCoTextPosition  = d.textPosition;
+    insp_bCoTextAlign     = d.textAlign;
+    insp_bCoOverlay       = d.overlay;
+    insp_bCoTextColorMode = d.textColorMode;
+  }
+
+  function blockPreviewIsMuted(block: DocumentBlock): boolean {
+    if (block.blockType === 'PAGE_BREAK' || block.blockType === 'SEPARATOR') return false;
+    if (block.blockType === 'IMAGE') {
+      const img = parseImageBlockContent(block.contentJson);
+      if (img.assetId) return false;
+      return !block.contentText.trim();
+    }
+    if (block.blockType === 'CHAPTER_OPENING') {
+      const co = parseChapterOpeningContent(block.contentJson);
+      if (co.assetId) return false;
+      return !co.chapterLabel.trim() && !co.title.trim();
+    }
+    return !block.contentText.trim();
+  }
 
   async function loadSections() {
     loadingSections = true;
@@ -244,6 +337,28 @@
     insp_bTextAlign     = L.textAlign;
     insp_bWidthMode     = L.widthMode;
     insp_bEmphasis      = L.emphasis;
+    if (block.blockType === 'IMAGE') {
+      const img = parseImageBlockContent(block.contentJson);
+      insp_bImageAssetId = img.assetId ?? '';
+      insp_bImageAlt     = img.altText;
+      insp_bImageCaption = img.caption;
+    } else {
+      insp_bImageAssetId = '';
+      insp_bImageAlt     = '';
+      insp_bImageCaption = '';
+    }
+    if (block.blockType === 'CHAPTER_OPENING') {
+      const co = parseChapterOpeningContent(block.contentJson);
+      insp_bCoLabel         = co.chapterLabel;
+      insp_bCoTitle         = co.title;
+      insp_bCoAssetId       = co.assetId ?? '';
+      insp_bCoTextPosition  = co.textPosition;
+      insp_bCoTextAlign     = co.textAlign;
+      insp_bCoOverlay       = co.overlay;
+      insp_bCoTextColorMode = co.textColorMode;
+    } else {
+      resetChapterOpeningInspector();
+    }
     resetInspectorDirty();
   }
 
@@ -313,15 +428,42 @@
         widthMode: insp_bWidthMode,
         emphasis:  insp_bEmphasis,
       });
+
+      let contentJsonPayload: string | null | undefined = undefined;
+      if (insp_bType === 'IMAGE') {
+        contentJsonPayload = serializeImageBlockContent({
+          assetId: insp_bImageAssetId.trim() !== '' ? insp_bImageAssetId.trim() : null,
+          altText: insp_bImageAlt,
+          caption: insp_bImageCaption,
+        });
+      } else if (insp_bType === 'CHAPTER_OPENING') {
+        contentJsonPayload = serializeChapterOpeningContent({
+          chapterLabel: insp_bCoLabel,
+          title:        insp_bCoTitle,
+          assetId:      insp_bCoAssetId.trim() !== '' ? insp_bCoAssetId.trim() : null,
+          textPosition: insp_bCoTextPosition,
+          textAlign:    insp_bCoTextAlign,
+          overlay:      insp_bCoOverlay,
+          textColorMode: insp_bCoTextColorMode,
+        });
+      } else if (
+        (prev?.blockType === 'IMAGE' && insp_bType !== 'IMAGE')
+        || (prev?.blockType === 'CHAPTER_OPENING' && insp_bType !== 'CHAPTER_OPENING')
+      ) {
+        contentJsonPayload = null;
+      }
+
+      const noMainText = insp_bType === 'IMAGE' || insp_bType === 'CHAPTER_OPENING';
       const updated = await updateBlock(selectedBlockId, {
         blockType:       insp_bType,
-        contentText:     insp_bContentText,
+        contentText:     noMainText ? '' : insp_bContentText,
         styleVariant:    insp_bStyleVariant,
         includeInToc:    insp_bIncludeToc,
         keepTogether:    insp_bKeepTogether,
         pageBreakBefore: insp_bBreakBefore,
         pageBreakAfter:  insp_bBreakAfter,
         metadataJson:    layoutMeta,
+        ...(contentJsonPayload !== undefined ? { contentJson: contentJsonPayload } : {}),
       });
       if (updated) {
         blocks = blocks.map(b => b.id === updated.id ? updated : b);
@@ -415,12 +557,25 @@
   }
 
   // ── Creación rápida de bloques ────────────────────────────────────────────
+  let coQuickTypeHint = $derived(
+    quickBlockType === 'CHAPTER_OPENING' && selectedSection?.sectionType !== 'CHAPTER'
+      ? 'Sugerencia: «Apertura de capítulo» encaja mejor en secciones tipo Capítulo.'
+      : null,
+  );
+
   async function addBlockQuick(where: 'end' | 'after') {
     if (!selectedSectionId || addingBlock) return;
     if (where === 'after' && !selectedBlockId) return;
     addingBlock = true;
     globalError = null;
     insertBlockError = null;
+    const openingHint = coQuickTypeHint;
+    if (openingHint) {
+      globalError = openingHint;
+      setTimeout(() => {
+        if (globalError === openingHint) globalError = null;
+      }, 4500);
+    }
     try {
       const afterId = where === 'after' ? selectedBlockId : null;
       const created = await createBlockInSection(selectedSectionId, blocks, afterId, {
@@ -443,6 +598,13 @@
     if (!selectedSectionId || addingBlock) return;
     addingBlock = true;
     globalError = null;
+    const openingHint = coQuickTypeHint;
+    if (openingHint) {
+      globalError = openingHint;
+      setTimeout(() => {
+        if (globalError === openingHint) globalError = null;
+      }, 4500);
+    }
     try {
       const created = await createBlockInSection(selectedSectionId, blocks, afterBlockId, {
         blockType:   quickBlockType,
@@ -552,6 +714,7 @@
     selectedSectionId = null;
     selectedBlockId   = null;
     await loadSections();
+    await loadBookAssets();
     if (sections.length > 0) {
       await selectSection(sections[0].id);
     } else {
@@ -735,6 +898,9 @@
             {/each}
           </select>
         </div>
+        {#if coQuickTypeHint}
+          <p class="modal-hint modal-hint--soft">{coQuickTypeHint}</p>
+        {/if}
         <p class="modal-hint modal-hint--insert">
           Elige dónde colocar el bloque. «Debajo del seleccionado» usa el bloque activo en la lista (resaltado).
         </p>
@@ -1063,6 +1229,9 @@
                   <option value={t}>{blockTypeLabel(t)}</option>
                 {/each}
               </select>
+              {#if coQuickTypeHint}
+                <p class="empty-co-hint">{coQuickTypeHint}</p>
+              {/if}
               <button type="button" class="btn btn--sm btn--primary" disabled={addingBlock} onclick={() => addBlockQuick('end')}>
                 {#if addingBlock}<span class="spinner-sm spinner-sm--light"></span>{:else}Primer bloque{/if}
               </button>
@@ -1086,10 +1255,55 @@
                   <span class="block-chip-label">{blockTypeLabel(block.blockType)}</span>
                 </div>
 
-                <div class="block-preview {blockLayoutPreviewClassNames(block)}">
-                  <span class="block-preview-text" class:block-preview-text--muted={!block.contentText.trim() && block.blockType !== 'PAGE_BREAK' && block.blockType !== 'SEPARATOR'}>
-                    {blockContentPreview(block)}
-                  </span>
+                <div
+                  class="block-preview {block.blockType === 'CHAPTER_OPENING' ? '' : blockLayoutPreviewClassNames(block)}"
+                  class:block-preview--with-thumb={block.blockType === 'IMAGE' && parseImageBlockContent(block.contentJson).assetId}
+                  class:block-preview--co-wrap={block.blockType === 'CHAPTER_OPENING'}
+                >
+                  {#if block.blockType === 'CHAPTER_OPENING'}
+                    {@const co = parseChapterOpeningContent(block.contentJson)}
+                    <div class="block-preview-co {chapterOpeningPreviewRootClassNames(co)}">
+                      {#if co.assetId}
+                        {@const ast = bookAssets.find(a => a.id === co.assetId)}
+                        {#if ast}
+                          <img
+                            class="block-preview-co__img"
+                            src={assetDisplayUrl(bookId, ast.storagePath)}
+                            alt=""
+                          />
+                        {:else}
+                          <div class="block-preview-co__ph">Asset no encontrado</div>
+                        {/if}
+                      {:else}
+                        <div class="block-preview-co__ph">Sin imagen</div>
+                      {/if}
+                      <div class="block-preview-co__text">
+                        {#if co.chapterLabel.trim()}
+                          <span class="block-preview-co__label">{co.chapterLabel}</span>
+                        {/if}
+                        {#if co.title.trim()}
+                          <span class="block-preview-co__title">{co.title}</span>
+                        {/if}
+                      </div>
+                    </div>
+                  {:else if block.blockType === 'IMAGE'}
+                    {@const ic = parseImageBlockContent(block.contentJson)}
+                    {#if ic.assetId}
+                      {@const ast = bookAssets.find(a => a.id === ic.assetId)}
+                      {#if ast}
+                        <img
+                          class="block-preview-thumb"
+                          src={assetDisplayUrl(bookId, ast.storagePath)}
+                          alt=""
+                        />
+                      {/if}
+                    {/if}
+                  {/if}
+                  {#if block.blockType !== 'CHAPTER_OPENING'}
+                    <span class="block-preview-text" class:block-preview-text--muted={blockPreviewIsMuted(block)}>
+                      {blockContentPreview(block)}
+                    </span>
+                  {/if}
                 </div>
 
                 <div class="block-actions">
@@ -1231,6 +1445,34 @@
                 insp_bTextAlign = L.textAlign;
                 insp_bWidthMode = L.widthMode;
                 insp_bEmphasis  = L.emphasis;
+                if (insp_bType === 'IMAGE') {
+                  insp_bImageAssetId = '';
+                  insp_bImageAlt     = '';
+                  insp_bImageCaption = '';
+                } else {
+                  insp_bImageAssetId = '';
+                  insp_bImageAlt     = '';
+                  insp_bImageCaption = '';
+                }
+                if (insp_bType === 'CHAPTER_OPENING') {
+                  if (
+                    selectedBlock?.blockType === 'CHAPTER_OPENING'
+                    && selectedBlock.id === selectedBlockId
+                  ) {
+                    const co = parseChapterOpeningContent(selectedBlock.contentJson);
+                    insp_bCoLabel         = co.chapterLabel;
+                    insp_bCoTitle         = co.title;
+                    insp_bCoAssetId       = co.assetId ?? '';
+                    insp_bCoTextPosition  = co.textPosition;
+                    insp_bCoTextAlign     = co.textAlign;
+                    insp_bCoOverlay       = co.overlay;
+                    insp_bCoTextColorMode = co.textColorMode;
+                  } else {
+                    resetChapterOpeningInspector();
+                  }
+                } else {
+                  resetChapterOpeningInspector();
+                }
                 markInspectorDirty();
                 onInspectorBlur();
               }}
@@ -1290,19 +1532,196 @@
             </div>
           {:else if inspSurface === 'image_placeholder'}
             <div class="insp-field">
-              <label class="insp-label" for="ib-text">Nota / leyenda provisional</label>
-              <p class="insp-hint insp-hint--block">La imagen en sí se gestionará con recursos en una fase posterior. Por ahora puedes anotar la idea o el pie.</p>
-              <div class={inspEditorWrapClass}>
-                <textarea
-                  id="ib-text"
-                  class="insp-textarea"
-                  bind:value={insp_bContentText}
-                  oninput={markInspectorDirty}
-                  onblur={onInspectorBlur}
-                  rows={4}
-                  placeholder="Ej.: Fotografía de portada — pendiente de subir"
-                ></textarea>
+              <label class="insp-label" for="ib-asset">Imagen del libro</label>
+              <p class="insp-hint insp-hint--block">
+                Elige un asset importado en <strong>Assets</strong> o añade archivos aquí. Una misma imagen puede usarse en varios bloques.
+              </p>
+              {#if insp_bImageAssetId}
+                {@const sel = bookAssets.find(a => a.id === insp_bImageAssetId)}
+                {#if sel}
+                  <div class="insp-image-preview">
+                    <img src={assetDisplayUrl(bookId, sel.storagePath)} alt={insp_bImageAlt || ''} />
+                  </div>
+                {/if}
+              {:else}
+                <div class="insp-image-placeholder">Sin imagen asignada</div>
+              {/if}
+              <select
+                id="ib-asset"
+                class="insp-select"
+                bind:value={insp_bImageAssetId}
+                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              >
+                <option value="">— Sin imagen —</option>
+                {#each bookAssets as a}
+                  <option value={a.id}>{a.originalName}</option>
+                {/each}
+              </select>
+              <button
+                type="button"
+                class="btn btn--ghost btn--sm btn--full insp-image-import"
+                onclick={() => void importImagesForBlock()}
+              >
+                + Importar imágenes nuevas…
+              </button>
+            </div>
+            <div class="insp-field">
+              <label class="insp-label" for="ib-img-alt">Texto alternativo (bloque)</label>
+              <input
+                id="ib-img-alt"
+                class="insp-input"
+                bind:value={insp_bImageAlt}
+                oninput={markInspectorDirty}
+                onblur={onInspectorBlur}
+                maxlength={500}
+                placeholder="Descripción breve para accesibilidad"
+              />
+            </div>
+            <div class="insp-field">
+              <label class="insp-label" for="ib-img-cap">Leyenda visible</label>
+              <textarea
+                id="ib-img-cap"
+                class="insp-textarea insp-textarea--short"
+                bind:value={insp_bImageCaption}
+                oninput={markInspectorDirty}
+                onblur={onInspectorBlur}
+                rows={3}
+                maxlength={2000}
+                placeholder="Pie de foto (opcional)"
+              ></textarea>
+            </div>
+          {:else if inspSurface === 'chapter_opening'}
+            <div class="insp-field">
+              <label class="insp-label" for="ib-co-label">Etiqueta del capítulo</label>
+              <input
+                id="ib-co-label"
+                class="insp-input"
+                bind:value={insp_bCoLabel}
+                oninput={markInspectorDirty}
+                onblur={onInspectorBlur}
+                maxlength={120}
+                placeholder="Ej: Capítulo 1:"
+              />
+            </div>
+            <div class="insp-field">
+              <label class="insp-label" for="ib-co-title">Título principal</label>
+              <input
+                id="ib-co-title"
+                class="insp-input"
+                bind:value={insp_bCoTitle}
+                oninput={markInspectorDirty}
+                onblur={onInspectorBlur}
+                maxlength={300}
+                placeholder="Ej: El llamado en la orilla"
+              />
+            </div>
+            <div class="insp-field">
+              <label class="insp-label" for="ib-co-asset">Imagen del libro</label>
+              <p class="insp-hint insp-hint--block">
+                Elige un asset en <strong>Assets</strong> o importa aquí. Vista previa orientativa para la maquetación final.
+              </p>
+              <div class="insp-co-preview {chapterOpeningPreviewRootClassNames({
+                chapterLabel: insp_bCoLabel,
+                title: insp_bCoTitle,
+                assetId: insp_bCoAssetId.trim() !== '' ? insp_bCoAssetId.trim() : null,
+                textPosition: insp_bCoTextPosition,
+                textAlign: insp_bCoTextAlign,
+                overlay: insp_bCoOverlay,
+                textColorMode: insp_bCoTextColorMode,
+              })}">
+                {#if insp_bCoAssetId}
+                  {@const sel = bookAssets.find(a => a.id === insp_bCoAssetId)}
+                  {#if sel}
+                    <img
+                      class="insp-co-preview__img"
+                      src={assetDisplayUrl(bookId, sel.storagePath)}
+                      alt=""
+                    />
+                  {:else}
+                    <div class="insp-co-preview__ph">Asset no encontrado</div>
+                  {/if}
+                {:else}
+                  <div class="insp-co-preview__ph">Sin imagen</div>
+                {/if}
+                <div class="insp-co-preview__text">
+                  {#if insp_bCoLabel.trim()}
+                    <span class="insp-co-preview__label">{insp_bCoLabel}</span>
+                  {/if}
+                  {#if insp_bCoTitle.trim()}
+                    <span class="insp-co-preview__title">{insp_bCoTitle}</span>
+                  {/if}
+                </div>
               </div>
+              <select
+                id="ib-co-asset"
+                class="insp-select"
+                bind:value={insp_bCoAssetId}
+                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              >
+                <option value="">— Sin imagen —</option>
+                {#each bookAssets as a}
+                  <option value={a.id}>{a.originalName}</option>
+                {/each}
+              </select>
+              <button
+                type="button"
+                class="btn btn--ghost btn--sm btn--full insp-image-import"
+                onclick={() => void importImagesForBlock()}
+              >
+                + Importar imágenes nuevas…
+              </button>
+            </div>
+            <div class="insp-field">
+              <label class="insp-label" for="ib-co-pos">Posición del texto</label>
+              <select
+                id="ib-co-pos"
+                class="insp-select"
+                bind:value={insp_bCoTextPosition}
+                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              >
+                {#each CHAPTER_OPENING_TEXT_POSITION_VALUES as p}
+                  <option value={p}>{chapterOpeningTextPositionLabel(p)}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="insp-field">
+              <label class="insp-label" for="ib-co-ta">Alineación del texto</label>
+              <select
+                id="ib-co-ta"
+                class="insp-select"
+                bind:value={insp_bCoTextAlign}
+                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              >
+                {#each CHAPTER_OPENING_TEXT_ALIGN_VALUES as a}
+                  <option value={a}>{chapterOpeningTextAlignLabel(a)}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="insp-field insp-field--inline">
+              <label class="insp-label insp-label--inline" for="ib-co-overlay">
+                Superposición (overlay)
+                <span class="insp-hint">Oscurece ligeramente la imagen detrás del texto.</span>
+              </label>
+              <input
+                id="ib-co-overlay"
+                type="checkbox"
+                class="insp-checkbox"
+                bind:checked={insp_bCoOverlay}
+                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              />
+            </div>
+            <div class="insp-field">
+              <label class="insp-label" for="ib-co-tone">Tono del texto</label>
+              <select
+                id="ib-co-tone"
+                class="insp-select"
+                bind:value={insp_bCoTextColorMode}
+                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              >
+                {#each CHAPTER_OPENING_TEXT_COLOR_MODE_VALUES as m}
+                  <option value={m}>{chapterOpeningTextColorModeLabel(m)}</option>
+                {/each}
+              </select>
             </div>
           {:else if inspSurface === 'static_page_break'}
             <div class="insp-static-note">
@@ -1854,6 +2273,16 @@
     margin-top: 4px;
   }
 
+  .empty-co-hint {
+    flex-basis: 100%;
+    width: 100%;
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.45;
+    color: rgba(255, 210, 150, 0.82);
+    margin: 2px 0 0;
+  }
+
   .inspector-empty-lead {
     font-size: 13px;
     font-weight: 600;
@@ -1947,6 +2376,141 @@
 
   .insp-hint--block {
     margin: 0 0 8px;
+  }
+
+  .insp-image-preview {
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.4);
+    margin-bottom: 8px;
+    max-height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .insp-image-preview img {
+    max-width: 100%;
+    max-height: 140px;
+    object-fit: contain;
+  }
+
+  .insp-image-placeholder {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.28);
+    padding: 14px;
+    text-align: center;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+
+  .insp-image-import {
+    margin-top: 8px;
+  }
+
+  .insp-co-preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    max-height: 160px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.42);
+    margin-bottom: 10px;
+  }
+  .insp-co-preview__img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .insp-co-preview__ph {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.32);
+  }
+  .insp-co-preview__text {
+    position: absolute;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    max-width: 90%;
+  }
+  .insp-co-preview.co-preview--pos-top-left .insp-co-preview__text {
+    top: 6px;
+    left: 6px;
+  }
+  .insp-co-preview.co-preview--pos-top-right .insp-co-preview__text {
+    top: 6px;
+    right: 6px;
+    align-items: flex-end;
+  }
+  .insp-co-preview.co-preview--pos-bottom-left .insp-co-preview__text {
+    bottom: 6px;
+    left: 6px;
+  }
+  .insp-co-preview.co-preview--pos-bottom-right .insp-co-preview__text {
+    bottom: 6px;
+    right: 6px;
+    align-items: flex-end;
+  }
+  .insp-co-preview.co-preview--pos-center .insp-co-preview__text {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    align-items: center;
+    text-align: center;
+  }
+  .insp-co-preview.co-preview--ta-left .insp-co-preview__text {
+    text-align: left;
+  }
+  .insp-co-preview.co-preview--ta-center .insp-co-preview__text {
+    text-align: center;
+  }
+  .insp-co-preview.co-preview--ta-right .insp-co-preview__text {
+    text-align: right;
+  }
+  .insp-co-preview.co-preview--overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.58), transparent 52%);
+  }
+  .insp-co-preview.co-preview--tone-light .insp-co-preview__label,
+  .insp-co-preview.co-preview--tone-light .insp-co-preview__title {
+    color: rgba(255, 255, 255, 0.96);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  }
+  .insp-co-preview.co-preview--tone-dark .insp-co-preview__label,
+  .insp-co-preview.co-preview--tone-dark .insp-co-preview__title {
+    color: rgba(20, 20, 28, 0.95);
+    text-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
+  }
+  .insp-co-preview.co-preview--tone-auto .insp-co-preview__label,
+  .insp-co-preview.co-preview--tone-auto .insp-co-preview__title {
+    color: rgba(255, 255, 255, 0.94);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+  .insp-co-preview__label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.92;
+  }
+  .insp-co-preview__title {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.2;
   }
 
   .block-idx {
@@ -2092,6 +2656,131 @@
   .block-preview--var-rights .block-preview-text {
     font-size: 11px;
     opacity: 0.55;
+  }
+
+  .block-preview--with-thumb {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .block-preview-thumb {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .block-preview--co-wrap {
+    flex: 1;
+    min-width: 0;
+    display: block;
+  }
+
+  .block-preview-co {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 72px;
+    border-radius: 7px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.4);
+  }
+  .block-preview-co__img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .block-preview-co__ph {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.32);
+  }
+  .block-preview-co__text {
+    position: absolute;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px 6px;
+    max-width: 90%;
+  }
+  .block-preview-co.co-preview--pos-top-left .block-preview-co__text {
+    top: 2px;
+    left: 2px;
+  }
+  .block-preview-co.co-preview--pos-top-right .block-preview-co__text {
+    top: 2px;
+    right: 2px;
+    align-items: flex-end;
+  }
+  .block-preview-co.co-preview--pos-bottom-left .block-preview-co__text {
+    bottom: 2px;
+    left: 2px;
+  }
+  .block-preview-co.co-preview--pos-bottom-right .block-preview-co__text {
+    bottom: 2px;
+    right: 2px;
+    align-items: flex-end;
+  }
+  .block-preview-co.co-preview--pos-center .block-preview-co__text {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    align-items: center;
+    text-align: center;
+  }
+  .block-preview-co.co-preview--ta-left .block-preview-co__text {
+    text-align: left;
+  }
+  .block-preview-co.co-preview--ta-center .block-preview-co__text {
+    text-align: center;
+  }
+  .block-preview-co.co-preview--ta-right .block-preview-co__text {
+    text-align: right;
+  }
+  .block-preview-co.co-preview--overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.52), transparent 55%);
+  }
+  .block-preview-co.co-preview--tone-light .block-preview-co__label,
+  .block-preview-co.co-preview--tone-light .block-preview-co__title {
+    color: rgba(255, 255, 255, 0.95);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+  }
+  .block-preview-co.co-preview--tone-dark .block-preview-co__label,
+  .block-preview-co.co-preview--tone-dark .block-preview-co__title {
+    color: rgba(22, 22, 30, 0.95);
+    text-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
+  }
+  .block-preview-co.co-preview--tone-auto .block-preview-co__label,
+  .block-preview-co.co-preview--tone-auto .block-preview-co__title {
+    color: rgba(255, 255, 255, 0.92);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  }
+  .block-preview-co__label {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    line-height: 1.1;
+  }
+  .block-preview-co__title {
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.15;
   }
 
   .block-preview-text {
@@ -2394,6 +3083,11 @@
 
   .modal-hint--insert {
     margin: -6px 0 0;
+  }
+
+  .modal-hint--soft {
+    color: rgba(255, 210, 150, 0.88);
+    margin: 4px 0 0;
   }
 
   .sr-only {

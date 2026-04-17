@@ -21,8 +21,9 @@ export function asAssetId(id: string): AssetId {
 // ─── Tipo de asset ────────────────────────────────────────────────────────────
 
 export type AssetType =
+  | 'image'          // Imagen genérica (cuerpo, galería) — PARTE 8
   | 'cover_image'    // Imagen de portada
-  | 'illustration'   // Ilustración interior
+  | 'illustration'   // Ilustración interior (legacy / sinónimo cercano a image)
   | 'font'           // Fuente tipográfica
   | 'background'     // Imagen de fondo de sección
   | 'logo'           // Logo del autor / editorial
@@ -44,6 +45,7 @@ export interface Asset {
   storagePath:   string;         // Ruta relativa desde el userData dir
   checksum:      string;         // SHA-256 del archivo (integridad)
   altText:       string;         // Texto alternativo (accesibilidad)
+  caption:       string;         // Pie de imagen / leyenda visible (opcional, puede ir vacío)
   createdAt:     string;
   updatedAt:     string;
 }
@@ -51,6 +53,8 @@ export interface Asset {
 // ─── Payloads ─────────────────────────────────────────────────────────────────
 
 export interface CreateAssetInput {
+  /** Si se omite, el repositorio genera un UUID (importación usa id fijo alineado con el nombre de archivo). */
+  id?:           string;
   bookId:        string;
   assetType:     AssetType;
   filename:      string;
@@ -63,9 +67,11 @@ export interface CreateAssetInput {
   storagePath:   string;
   checksum:      string;
   altText?:      string;
+  caption?:      string;
 }
 
 export interface UpdateAssetInput {
-  altText?:  string;
-  assetType?: AssetType;
+  altText?:    string;
+  caption?:    string;
+  assetType?:  AssetType;
 }

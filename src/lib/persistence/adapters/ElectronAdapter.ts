@@ -21,6 +21,8 @@ import type {
   DocumentBlock,
   CreateBlockInput,
   UpdateBlockInput,
+  Asset,
+  UpdateAssetInput,
 } from '$lib/core/domain/index';
 
 /** Lanza una excepción si la respuesta IPC contiene un campo 'error'. */
@@ -131,5 +133,40 @@ export class ElectronAdapter implements IPlatformAdapter {
 
   async reorderBlocks(sectionId: string, ids: string[]): Promise<void> {
     unwrap(await this.api.blocks.reorder(sectionId, ids));
+  }
+
+  // ── Assets ───────────────────────────────────────────────────────────────
+
+  async listAssetsByBook(bookId: string): Promise<Asset[]> {
+    return unwrap(await this.api.assets.listByBook(bookId));
+  }
+
+  async getAssetById(id: string): Promise<Asset | null> {
+    const res = await this.api.assets.getById(id);
+    if (res && 'error' in res) throw new Error((res as { error: string }).error);
+    return res as Asset | null;
+  }
+
+  async updateAsset(id: string, input: UpdateAssetInput): Promise<Asset | null> {
+    const res = await this.api.assets.update(id, input);
+    if (res && 'error' in res) throw new Error((res as { error: string }).error);
+    return res as Asset | null;
+  }
+
+  async deleteAsset(id: string): Promise<boolean> {
+    const res = unwrap(await this.api.assets.delete(id));
+    return (res as { deleted: boolean }).deleted;
+  }
+
+  async pickAndImportAssets(bookId: string): Promise<Asset[]> {
+    const res = await this.api.assets.pickAndImport(bookId);
+    if (res && 'error' in res) throw new Error((res as { error: string }).error);
+    return (res as { imported: Asset[] }).imported;
+  }
+
+  async importAssetFiles(bookId: string, paths: string[]): Promise<Asset[]> {
+    const res = await this.api.assets.importPaths(bookId, paths);
+    if (res && 'error' in res) throw new Error((res as { error: string }).error);
+    return (res as { imported: Asset[] }).imported;
   }
 }

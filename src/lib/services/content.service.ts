@@ -62,6 +62,29 @@ export {
 
 export { inferSectionTypeFromTitle } from '$lib/core/editorial/section-title-heuristic';
 
+export {
+  parseImageBlockContent,
+  serializeImageBlockContent,
+  type ImageBlockContent,
+} from '$lib/core/editorial/image-block-content';
+
+export {
+  parseChapterOpeningContent,
+  serializeChapterOpeningContent,
+  EMPTY_CHAPTER_OPENING_CONTENT,
+  CHAPTER_OPENING_TEXT_POSITION_VALUES,
+  CHAPTER_OPENING_TEXT_ALIGN_VALUES,
+  CHAPTER_OPENING_TEXT_COLOR_MODE_VALUES,
+  chapterOpeningPreviewRootClassNames,
+  chapterOpeningTextPositionLabel,
+  chapterOpeningTextAlignLabel,
+  chapterOpeningTextColorModeLabel,
+  type ChapterOpeningBlockContent,
+  type ChapterOpeningTextPosition,
+  type ChapterOpeningTextAlign,
+  type ChapterOpeningTextColorMode,
+} from '$lib/core/editorial/chapter-opening-content';
+
 // ─── Secciones ────────────────────────────────────────────────────────────────
 
 export async function listSections(bookId: string): Promise<DocumentSection[]> {

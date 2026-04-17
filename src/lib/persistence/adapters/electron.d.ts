@@ -16,6 +16,8 @@ import type {
   DocumentBlock,
   CreateBlockInput,
   UpdateBlockInput,
+  Asset,
+  UpdateAssetInput,
 } from '$lib/core/domain/index';
 
 declare global {
@@ -72,6 +74,15 @@ declare global {
         update(id: string, input: UpdateBlockInput):              Promise<DocumentBlock | null | { error: string }>;
         delete(id: string):                                       Promise<{ deleted: boolean } | { error: string }>;
         reorder(sectionId: string, orderedIds: string[]):         Promise<{ ok: boolean } | { error: string }>;
+      };
+
+      assets: {
+        listByBook(bookId: string):                               Promise<Asset[] | { error: string }>;
+        getById(id: string):                                      Promise<Asset | null | { error: string }>;
+        update(id: string, input: UpdateAssetInput):              Promise<Asset | null | { error: string }>;
+        delete(id: string):                                       Promise<{ deleted: boolean } | { error: string }>;
+        pickAndImport(bookId: string):                            Promise<{ imported: Asset[] } | { error: string }>;
+        importPaths(bookId: string, paths: string[]):            Promise<{ imported: Asset[] } | { error: string }>;
       };
     };
   }

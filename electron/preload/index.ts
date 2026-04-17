@@ -66,4 +66,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     reorder:        (sectionId, orderedIds)  => ipcRenderer.invoke('blocks:reorder', sectionId, orderedIds),
   },
 
+  // ── Assets (imágenes por libro) — PARTE 8 ─────────────────────────────────
+  assets: {
+    listByBook:    (bookId)                 => ipcRenderer.invoke('assets:listByBook', bookId),
+    getById:       (id)                     => ipcRenderer.invoke('assets:getById', id),
+    update:        (id, input)              => ipcRenderer.invoke('assets:update', id, input),
+    delete:        (id)                     => ipcRenderer.invoke('assets:delete', id),
+    pickAndImport: (bookId)                 => ipcRenderer.invoke('assets:pickAndImport', bookId),
+    importPaths:   (bookId, paths)          => ipcRenderer.invoke('assets:importPaths', bookId, paths),
+  },
+
 });
