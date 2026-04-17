@@ -62,15 +62,32 @@ export function normalizeBlockType(raw: string): BlockType {
 }
 
 /**
- * Variante de estilo aplicable a un bloque (maquetación futura).
+ * Variante de estilo aplicable a un bloque (presentación editorial + maquetación futura).
+ * PARTE 7: variantes dedicatoria, índice, derechos, nota de autor, cita grande.
  */
-export type BlockStyleVariant =
-  | 'default'
-  | 'lead'
-  | 'caption'
-  | 'footnote'
-  | 'pull_quote'
-  | 'code_inline';
+export const BLOCK_STYLE_VARIANT_VALUES = [
+  'default',
+  'lead',
+  'caption',
+  'footnote',
+  'pull_quote',
+  'code_inline',
+  'dedication',
+  'toc_entry',
+  'rights',
+  'author_note',
+  'quote_large',
+] as const;
+
+export type BlockStyleVariant = (typeof BLOCK_STYLE_VARIANT_VALUES)[number];
+
+const _styleVariantCanonical = new Set<string>(BLOCK_STYLE_VARIANT_VALUES);
+
+export function normalizeStyleVariant(raw: string): BlockStyleVariant {
+  const t = raw.trim();
+  if (_styleVariantCanonical.has(t)) return t as BlockStyleVariant;
+  return 'default';
+}
 
 export interface DocumentBlock {
   id:              BlockId;

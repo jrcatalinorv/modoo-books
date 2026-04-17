@@ -68,6 +68,11 @@ export function blockShowsStyleVariant(type: BlockType): boolean {
   return type !== 'PAGE_BREAK' && type !== 'SEPARATOR';
 }
 
+/** Alineación / ancho / énfasis (PARTE 7): no aplica al marcador de salto de página. */
+export function blockShowsLayoutControls(type: BlockType): boolean {
+  return type !== 'PAGE_BREAK';
+}
+
 /** Opciones de salto / keepTogether: el PAGE_BREAK ya es un salto explícito. */
 export function blockShowsFlowOptions(type: BlockType): boolean {
   return type !== 'PAGE_BREAK';

@@ -319,25 +319,59 @@ export {
   blockEditorSurface,
   blockShowsIncludeInToc,
   blockShowsStyleVariant,
+  blockShowsLayoutControls,
   blockShowsFlowOptions,
   blockHasEditableText,
   blockContentPreview,
   blockEmptyPreviewHint,
 } from '$lib/core/editorial/block-type-catalog';
 
+export {
+  resolveBlockLayout,
+  mergeLayoutIntoMetadata,
+  defaultBlockLayout,
+  blockLayoutPreviewClassNames,
+  blockLayoutEditorWrapClassNames,
+  BLOCK_TEXT_ALIGN_OPTIONS,
+  BLOCK_WIDTH_MODE_OPTIONS,
+  BLOCK_EMPHASIS_OPTIONS,
+  textAlignLabel,
+  widthModeLabel,
+  emphasisLabel,
+  type BlockTextAlign,
+  type BlockWidthMode,
+  type BlockEmphasis,
+  type BlockLayoutStyle,
+} from '$lib/core/editorial/block-layout';
+
 /** Etiqueta para BlockStyleVariant */
 export function styleVariantLabel(variant: BlockStyleVariant): string {
   const map: Record<BlockStyleVariant, string> = {
-    default:     'Por defecto',
-    lead:        'Lead / entradilla',
-    caption:     'Leyenda',
-    footnote:    'Nota al pie',
-    pull_quote:  'Cita destacada',
-    code_inline: 'Código inline',
+    default:      'Estándar',
+    lead:         'Lead / entradilla',
+    caption:      'Leyenda',
+    footnote:     'Nota al pie',
+    pull_quote:   'Cita destacada',
+    code_inline:  'Código inline',
+    dedication:   'Dedicatoria',
+    toc_entry:    'Entrada de índice',
+    rights:       'Derechos / créditos legales',
+    author_note:  'Nota del autor',
+    quote_large:  'Cita grande',
   };
   return map[variant] ?? variant;
 }
 
 export const ALL_STYLE_VARIANTS: BlockStyleVariant[] = [
-  'default', 'lead', 'caption', 'footnote', 'pull_quote', 'code_inline',
+  'default',
+  'lead',
+  'dedication',
+  'toc_entry',
+  'rights',
+  'author_note',
+  'caption',
+  'footnote',
+  'pull_quote',
+  'quote_large',
+  'code_inline',
 ];

@@ -42,7 +42,9 @@ export type {
 export {
   asBlockId,
   BLOCK_TYPE_VALUES,
+  BLOCK_STYLE_VARIANT_VALUES,
   normalizeBlockType,
+  normalizeStyleVariant,
   DEFAULT_BLOCK_TYPE,
 } from './block';
 

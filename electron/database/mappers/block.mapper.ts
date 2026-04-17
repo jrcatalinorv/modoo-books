@@ -4,8 +4,13 @@
  * Convierte entre filas de SQLite y entidades DocumentBlock del dominio.
  */
 
-import type { DocumentBlock, BlockStyleVariant } from '../../../src/lib/core/domain/block';
-import { asBlockId, normalizeBlockType, DEFAULT_BLOCK_TYPE } from '../../../src/lib/core/domain/block';
+import type { DocumentBlock } from '../../../src/lib/core/domain/block';
+import {
+  asBlockId,
+  normalizeBlockType,
+  normalizeStyleVariant,
+  DEFAULT_BLOCK_TYPE,
+} from '../../../src/lib/core/domain/block';
 import type { SqlValue } from 'sql.js';
 
 export function rowToDocumentBlock(row: Record<string, SqlValue>): DocumentBlock {
@@ -16,7 +21,7 @@ export function rowToDocumentBlock(row: Record<string, SqlValue>): DocumentBlock
     orderIndex:      Number(row.order_index ?? 0),
     contentText:     String(row.content_text ?? ''),
     contentJson:     row.content_json != null ? String(row.content_json) : null,
-    styleVariant:    (String(row.style_variant ?? 'default')) as BlockStyleVariant,
+    styleVariant:    normalizeStyleVariant(String(row.style_variant ?? 'default')),
     includeInToc:    Number(row.include_in_toc ?? 0) === 1,
     keepTogether:    Number(row.keep_together ?? 0) === 1,
     pageBreakBefore: Number(row.page_break_before ?? 0) === 1,

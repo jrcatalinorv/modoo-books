@@ -22,16 +22,31 @@
     blockEditorSurface,
     blockShowsIncludeInToc,
     blockShowsStyleVariant,
+    blockShowsLayoutControls,
     blockShowsFlowOptions,
     blockHasEditableText,
     blockContentPreview,
     styleVariantLabel, ALL_STYLE_VARIANTS,
+    resolveBlockLayout,
+    defaultBlockLayout,
+    mergeLayoutIntoMetadata,
+    blockLayoutPreviewClassNames,
+    blockLayoutEditorWrapClassNames,
+    BLOCK_TEXT_ALIGN_OPTIONS,
+    BLOCK_WIDTH_MODE_OPTIONS,
+    BLOCK_EMPHASIS_OPTIONS,
+    textAlignLabel,
+    widthModeLabel,
+    emphasisLabel,
     importMarkdownBlocksToSection,
     parseMarkdownToBlockDrafts,
     buildMarkdownImportPreview,
     validateMarkdownForImport,
     type MarkdownImportMode,
     type MarkdownImportPreview,
+    type BlockTextAlign,
+    type BlockWidthMode,
+    type BlockEmphasis,
   } from '$lib/services/content.service';
   import SectionTypeSelect from '$lib/components/SectionTypeSelect.svelte';
   import BookMarkdownImportModal from '$lib/components/BookMarkdownImportModal.svelte';
@@ -127,6 +142,10 @@
   let insp_bBreakBefore    = $state(false);
   let insp_bBreakAfter     = $state(false);
 
+  let insp_bTextAlign      = $state<BlockTextAlign>('left');
+  let insp_bWidthMode      = $state<BlockWidthMode>('full');
+  let insp_bEmphasis       = $state<BlockEmphasis>('normal');
+
   // Suciedad del inspector
   let inspectorDirty = $state(false);
 
@@ -221,6 +240,10 @@
     insp_bKeepTogether  = block.keepTogether;
     insp_bBreakBefore   = block.pageBreakBefore;
     insp_bBreakAfter    = block.pageBreakAfter;
+    const L             = resolveBlockLayout(block);
+    insp_bTextAlign     = L.textAlign;
+    insp_bWidthMode     = L.widthMode;
+    insp_bEmphasis      = L.emphasis;
     resetInspectorDirty();
   }
 
@@ -284,6 +307,12 @@
     inspectorSaving = true;
     inspectorError  = null;
     try {
+      const prev      = blocks.find(b => b.id === selectedBlockId);
+      const layoutMeta = mergeLayoutIntoMetadata(prev?.metadataJson ?? null, {
+        textAlign: insp_bTextAlign,
+        widthMode: insp_bWidthMode,
+        emphasis:  insp_bEmphasis,
+      });
       const updated = await updateBlock(selectedBlockId, {
         blockType:       insp_bType,
         contentText:     insp_bContentText,
@@ -292,6 +321,7 @@
         keepTogether:    insp_bKeepTogether,
         pageBreakBefore: insp_bBreakBefore,
         pageBreakAfter:  insp_bBreakAfter,
+        metadataJson:    layoutMeta,
       });
       if (updated) {
         blocks = blocks.map(b => b.id === updated.id ? updated : b);
@@ -464,6 +494,17 @@
   }
 
   let inspSurface = $derived(blockEditorSurface(insp_bType));
+
+  let inspEditorWrapClass = $derived(
+    blockLayoutEditorWrapClassNames(
+      {
+        textAlign: insp_bTextAlign,
+        widthMode: insp_bWidthMode,
+        emphasis:  insp_bEmphasis,
+      },
+      insp_bStyleVariant,
+    ),
+  );
 
   let mdImportPreview = $derived.by((): MarkdownImportPreview | null => {
     if (!mdImportText.trim()) return null;
@@ -1045,7 +1086,7 @@
                   <span class="block-chip-label">{blockTypeLabel(block.blockType)}</span>
                 </div>
 
-                <div class="block-preview">
+                <div class="block-preview {blockLayoutPreviewClassNames(block)}">
                   <span class="block-preview-text" class:block-preview-text--muted={!block.contentText.trim() && block.blockType !== 'PAGE_BREAK' && block.blockType !== 'SEPARATOR'}>
                     {blockContentPreview(block)}
                   </span>
@@ -1185,7 +1226,14 @@
               id="ib-type"
               class="insp-select"
               bind:value={insp_bType}
-              onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              onchange={() => {
+                const L = defaultBlockLayout(insp_bType, insp_bStyleVariant);
+                insp_bTextAlign = L.textAlign;
+                insp_bWidthMode = L.widthMode;
+                insp_bEmphasis  = L.emphasis;
+                markInspectorDirty();
+                onInspectorBlur();
+              }}
             >
               {#each ALL_BLOCK_TYPES as t}
                 <option value={t}>{blockTypeLabel(t)}</option>
@@ -1196,57 +1244,65 @@
           {#if inspSurface === 'short'}
             <div class="insp-field">
               <label class="insp-label" for="ib-text">Texto</label>
-              <textarea
-                id="ib-text"
-                class="insp-textarea insp-textarea--short"
-                bind:value={insp_bContentText}
-                oninput={markInspectorDirty}
-                onblur={onInspectorBlur}
-                rows={3}
-                maxlength={2000}
-                placeholder="Título o encabezado…"
-              ></textarea>
+              <div class={inspEditorWrapClass}>
+                <textarea
+                  id="ib-text"
+                  class="insp-textarea insp-textarea--short"
+                  bind:value={insp_bContentText}
+                  oninput={markInspectorDirty}
+                  onblur={onInspectorBlur}
+                  rows={3}
+                  maxlength={2000}
+                  placeholder="Título o encabezado…"
+                ></textarea>
+              </div>
             </div>
           {:else if inspSurface === 'large'}
             <div class="insp-field">
               <label class="insp-label" for="ib-text">Contenido</label>
-              <textarea
-                id="ib-text"
-                class="insp-textarea insp-textarea--write"
-                bind:value={insp_bContentText}
-                oninput={markInspectorDirty}
-                onblur={onInspectorBlur}
-                rows={14}
-                placeholder="Escribe aquí. Puedes usar párrafos simples; el formato rico llegará más adelante."
-              ></textarea>
+              <div class={inspEditorWrapClass}>
+                <textarea
+                  id="ib-text"
+                  class="insp-textarea insp-textarea--write"
+                  bind:value={insp_bContentText}
+                  oninput={markInspectorDirty}
+                  onblur={onInspectorBlur}
+                  rows={14}
+                  placeholder="Escribe aquí. Puedes usar párrafos simples; el formato rico llegará más adelante."
+                ></textarea>
+              </div>
             </div>
           {:else if inspSurface === 'medium'}
             <div class="insp-field">
               <label class="insp-label" for="ib-text">Texto centrado</label>
-              <textarea
-                id="ib-text"
-                class="insp-textarea"
-                bind:value={insp_bContentText}
-                oninput={markInspectorDirty}
-                onblur={onInspectorBlur}
-                rows={6}
-                maxlength={1500}
-                placeholder="Línea o frase centrada (dedicatoria, epígrafe…)…"
-              ></textarea>
+              <div class={inspEditorWrapClass}>
+                <textarea
+                  id="ib-text"
+                  class="insp-textarea"
+                  bind:value={insp_bContentText}
+                  oninput={markInspectorDirty}
+                  onblur={onInspectorBlur}
+                  rows={6}
+                  maxlength={1500}
+                  placeholder="Línea o frase centrada (dedicatoria, epígrafe…)…"
+                ></textarea>
+              </div>
             </div>
           {:else if inspSurface === 'image_placeholder'}
             <div class="insp-field">
               <label class="insp-label" for="ib-text">Nota / leyenda provisional</label>
               <p class="insp-hint insp-hint--block">La imagen en sí se gestionará con recursos en una fase posterior. Por ahora puedes anotar la idea o el pie.</p>
-              <textarea
-                id="ib-text"
-                class="insp-textarea"
-                bind:value={insp_bContentText}
-                oninput={markInspectorDirty}
-                onblur={onInspectorBlur}
-                rows={4}
-                placeholder="Ej.: Fotografía de portada — pendiente de subir"
-              ></textarea>
+              <div class={inspEditorWrapClass}>
+                <textarea
+                  id="ib-text"
+                  class="insp-textarea"
+                  bind:value={insp_bContentText}
+                  oninput={markInspectorDirty}
+                  onblur={onInspectorBlur}
+                  rows={4}
+                  placeholder="Ej.: Fotografía de portada — pendiente de subir"
+                ></textarea>
+              </div>
             </div>
           {:else if inspSurface === 'static_page_break'}
             <div class="insp-static-note">
@@ -1255,25 +1311,81 @@
           {:else if inspSurface === 'none'}
             <div class="insp-static-note insp-static-note--subtle">
               <p>Separador visual. Opcionalmente puedes añadir una nota interna (no se mostrará como texto principal hasta definir estilo).</p>
-              <textarea
-                class="insp-textarea insp-textarea--short"
-                bind:value={insp_bContentText}
-                oninput={markInspectorDirty}
-                onblur={onInspectorBlur}
-                rows={2}
-                placeholder="Nota opcional…"
-              ></textarea>
+              <div class={inspEditorWrapClass}>
+                <textarea
+                  class="insp-textarea insp-textarea--short"
+                  bind:value={insp_bContentText}
+                  oninput={markInspectorDirty}
+                  onblur={onInspectorBlur}
+                  rows={2}
+                  placeholder="Nota opcional…"
+                ></textarea>
+              </div>
+            </div>
+          {/if}
+
+          {#if blockShowsLayoutControls(insp_bType)}
+            <div class="insp-divider"></div>
+            <div class="insp-section-label">Presentación</div>
+
+            <div class="insp-field">
+              <label class="insp-label" for="ib-align">Alineación</label>
+              <select
+                id="ib-align"
+                class="insp-select"
+                bind:value={insp_bTextAlign}
+                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              >
+                {#each BLOCK_TEXT_ALIGN_OPTIONS as a}
+                  <option value={a}>{textAlignLabel(a)}</option>
+                {/each}
+              </select>
+            </div>
+
+            <div class="insp-field">
+              <label class="insp-label" for="ib-width">Ancho del texto</label>
+              <select
+                id="ib-width"
+                class="insp-select"
+                bind:value={insp_bWidthMode}
+                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              >
+                {#each BLOCK_WIDTH_MODE_OPTIONS as w}
+                  <option value={w}>{widthModeLabel(w)}</option>
+                {/each}
+              </select>
+            </div>
+
+            <div class="insp-field">
+              <label class="insp-label" for="ib-emph">Énfasis</label>
+              <select
+                id="ib-emph"
+                class="insp-select"
+                bind:value={insp_bEmphasis}
+                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+              >
+                {#each BLOCK_EMPHASIS_OPTIONS as e}
+                  <option value={e}>{emphasisLabel(e)}</option>
+                {/each}
+              </select>
             </div>
           {/if}
 
           {#if blockShowsStyleVariant(insp_bType)}
             <div class="insp-field">
-              <label class="insp-label" for="ib-style">Variante de estilo</label>
+              <label class="insp-label" for="ib-style">Variante editorial</label>
               <select
                 id="ib-style"
                 class="insp-select"
                 bind:value={insp_bStyleVariant}
-                onchange={() => { markInspectorDirty(); onInspectorBlur(); }}
+                onchange={() => {
+                  const L = defaultBlockLayout(insp_bType, insp_bStyleVariant);
+                  insp_bTextAlign = L.textAlign;
+                  insp_bWidthMode = L.widthMode;
+                  insp_bEmphasis  = L.emphasis;
+                  markInspectorDirty();
+                  onInspectorBlur();
+                }}
               >
                 {#each ALL_STYLE_VARIANTS as v}
                   <option value={v}>{styleVariantLabel(v)}</option>
@@ -1768,6 +1880,47 @@
     color: #7ab8e8;
   }
 
+  /* PARTE 7 — reflejo de layout en el inspector */
+  .insp-editor-visual {
+    width: 100%;
+  }
+  .insp-editor-visual--ta-center .insp-textarea {
+    text-align: center;
+  }
+  .insp-editor-visual--ta-right .insp-textarea {
+    text-align: right;
+  }
+  .insp-editor-visual--ta-justify .insp-textarea {
+    text-align: justify;
+  }
+  .insp-editor-visual--wm-narrow .insp-textarea {
+    max-width: 14rem;
+    margin-inline: auto;
+    display: block;
+  }
+  .insp-editor-visual--wm-medium .insp-textarea {
+    max-width: 22rem;
+    margin-inline: auto;
+    display: block;
+  }
+  .insp-editor-visual--em-muted .insp-textarea {
+    opacity: 0.78;
+  }
+  .insp-editor-visual--em-strong .insp-textarea {
+    font-weight: 600;
+  }
+  .insp-editor-visual--var-dedication .insp-textarea {
+    font-style: italic;
+    letter-spacing: 0.02em;
+  }
+  .insp-editor-visual--var-rights .insp-textarea {
+    font-size: 12px;
+  }
+  .insp-editor-visual--var-pull-quote .insp-textarea,
+  .insp-editor-visual--var-quote-large .insp-textarea {
+    font-weight: 600;
+  }
+
   .insp-textarea--write {
     min-height: 220px;
     line-height: 1.55;
@@ -1898,7 +2051,48 @@
   .block-item--active .block-chip-label { color: #7ab8e8; }
 
   /* Preview del contenido */
-  .block-preview { flex: 1; min-width: 0; }
+  .block-preview {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* PARTE 7 — preview según layout editorial */
+  .block-preview--ta-center {
+    text-align: center;
+  }
+  .block-preview--ta-right {
+    text-align: right;
+  }
+  .block-preview--ta-justify {
+    text-align: justify;
+  }
+  .block-preview--wm-narrow {
+    max-width: 12rem;
+    margin-inline: auto;
+  }
+  .block-preview--wm-medium {
+    max-width: 19rem;
+    margin-inline: auto;
+  }
+  .block-preview--em-muted .block-preview-text {
+    opacity: 0.62;
+  }
+  .block-preview--em-strong .block-preview-text {
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.62);
+  }
+  .block-preview--var-dedication .block-preview-text {
+    font-style: italic;
+    letter-spacing: 0.03em;
+  }
+  .block-preview--var-pull-quote .block-preview-text,
+  .block-preview--var-quote-large .block-preview-text {
+    font-weight: 600;
+  }
+  .block-preview--var-rights .block-preview-text {
+    font-size: 11px;
+    opacity: 0.55;
+  }
 
   .block-preview-text {
     font-size: 12px;

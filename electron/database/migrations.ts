@@ -15,6 +15,7 @@
  *   v3 — Tipos de sección ampliados; tabla document_sections sin CHECK en section_type
  *   v4 — Valores section_type normalizados a SCREAMING_SNAKE_CASE (p. ej. CHAPTER)
  *   v5 — Tipos de bloque v1; document_blocks sin CHECK en block_type; datos migrados
+ *   v6 — style_variant ampliado (variantes editoriales PARTE 7)
  */
 
 import type { Database } from 'sql.js';
@@ -443,6 +444,79 @@ const migrations: Migration[] = [
       `);
 
       console.log('[DB] v5: document_blocks migrada a tipos editor v1.');
+    },
+  },
+
+  // ─── v6: Variantes de estilo de bloque (dedicatoria, índice, derechos…) ───
+  {
+    version: 6,
+    name: 'block_style_variants_editorial_v7',
+    up(db) {
+      db.run('ALTER TABLE document_blocks RENAME TO _bkp_document_blocks_v6');
+
+      db.run(`
+        CREATE TABLE document_blocks (
+          id                TEXT PRIMARY KEY,
+          section_id        TEXT NOT NULL REFERENCES document_sections(id) ON DELETE CASCADE,
+          block_type        TEXT NOT NULL DEFAULT 'PARAGRAPH',
+          order_index       INTEGER NOT NULL DEFAULT 0,
+          content_text      TEXT NOT NULL DEFAULT '',
+          content_json      TEXT,
+          style_variant     TEXT NOT NULL DEFAULT 'default'
+            CHECK(style_variant IN (
+              'default','lead','caption','footnote','pull_quote','code_inline',
+              'dedication','toc_entry','rights','author_note','quote_large'
+            )),
+          include_in_toc    INTEGER NOT NULL DEFAULT 0,
+          keep_together     INTEGER NOT NULL DEFAULT 0,
+          page_break_before INTEGER NOT NULL DEFAULT 0,
+          page_break_after  INTEGER NOT NULL DEFAULT 0,
+          metadata_json     TEXT,
+          created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+
+      db.run(`
+        INSERT INTO document_blocks
+          (id, section_id, block_type, order_index, content_text, content_json,
+           style_variant, include_in_toc, keep_together,
+           page_break_before, page_break_after, metadata_json, created_at, updated_at)
+        SELECT
+          id, section_id, block_type, order_index, content_text, content_json,
+          CASE lower(style_variant)
+            WHEN 'default' THEN 'default'
+            WHEN 'lead' THEN 'lead'
+            WHEN 'caption' THEN 'caption'
+            WHEN 'footnote' THEN 'footnote'
+            WHEN 'pull_quote' THEN 'pull_quote'
+            WHEN 'code_inline' THEN 'code_inline'
+            WHEN 'dedication' THEN 'dedication'
+            WHEN 'toc_entry' THEN 'toc_entry'
+            WHEN 'rights' THEN 'rights'
+            WHEN 'author_note' THEN 'author_note'
+            WHEN 'quote_large' THEN 'quote_large'
+            ELSE 'default'
+          END,
+          include_in_toc, keep_together,
+          page_break_before, page_break_after, metadata_json, created_at, updated_at
+        FROM _bkp_document_blocks_v6
+      `);
+
+      db.run('DROP TABLE _bkp_document_blocks_v6');
+
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_blocks_section_id
+        ON document_blocks(section_id, order_index)
+      `);
+
+      db.run(`
+        INSERT OR REPLACE INTO app_settings (key, value) VALUES
+          ('appVersion',    '0.5.0'),
+          ('schemaVersion', '6')
+      `);
+
+      console.log('[DB] v6: style_variant ampliado (PARTE 7).');
     },
   },
 
