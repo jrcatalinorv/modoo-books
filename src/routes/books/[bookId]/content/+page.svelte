@@ -26,6 +26,12 @@
     blockHasEditableText,
     blockContentPreview,
     styleVariantLabel, ALL_STYLE_VARIANTS,
+    importMarkdownBlocksToSection,
+    parseMarkdownToBlockDrafts,
+    buildMarkdownImportPreview,
+    validateMarkdownForImport,
+    type MarkdownImportMode,
+    type MarkdownImportPreview,
   } from '$lib/services/content.service';
   import SectionTypeSelect from '$lib/components/SectionTypeSelect.svelte';
   import type {
@@ -65,6 +71,14 @@
   let addingBlock            = $state(false);
   let showInsertBlockModal   = $state(false);
   let insertBlockError       = $state<string | null>(null);
+
+  // Importación Markdown por sección (PARTE 6A)
+  let showMdImportModal      = $state(false);
+  let mdImportText           = $state('');
+  let mdImportMode           = $state<MarkdownImportMode>('append');
+  let mdImportError          = $state<string | null>(null);
+  let mdImporting            = $state(false);
+  let mdFileInput            = $state<HTMLInputElement | null>(null);
 
   // Confirmación de borrado
   let confirmDeleteSection   = $state<DocumentSection | null>(null);
@@ -446,6 +460,87 @@
   }
 
   let inspSurface = $derived(blockEditorSurface(insp_bType));
+
+  let mdImportPreview = $derived.by((): MarkdownImportPreview | null => {
+    if (!mdImportText.trim()) return null;
+    const drafts = parseMarkdownToBlockDrafts(mdImportText);
+    if (drafts.length === 0) return null;
+    return buildMarkdownImportPreview(drafts);
+  });
+
+  /** Etiqueta de tipo de bloque para claves devueltas por `Object.entries`. */
+  function previewBlockTypeLabel(t: string): string {
+    return blockTypeLabel(t as BlockType);
+  }
+
+  function openMdImportModal() {
+    mdImportError = null;
+    mdImportText = '';
+    mdImportMode = 'append';
+    showMdImportModal = true;
+  }
+
+  function closeMdImportModal() {
+    if (mdImporting) return;
+    showMdImportModal = false;
+    mdImportError = null;
+  }
+
+  function onMdFileChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const f = input.files?.[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      mdImportText = String(r.result ?? '');
+      mdImportError = null;
+    };
+    r.onerror = () => {
+      mdImportError = 'No se pudo leer el archivo.';
+    };
+    r.readAsText(f);
+    input.value = '';
+  }
+
+  async function confirmMdImport() {
+    if (!selectedSectionId || mdImporting) return;
+    const v = validateMarkdownForImport(mdImportText);
+    if (!v.ok) {
+      mdImportError = v.message;
+      return;
+    }
+    const drafts = parseMarkdownToBlockDrafts(mdImportText);
+    if (drafts.length === 0) {
+      mdImportError =
+        'No se detectaron bloques. Usa párrafos, # título, ## subtítulo, > cita, ---, [[PAGE_BREAK]] o ![alt](ruta).';
+      return;
+    }
+    if (mdImportMode === 'replace' && blocks.length > 0) {
+      const ok = confirm(
+        `¿Reemplazar los ${blocks.length} bloque(s) actuales por ${drafts.length} importado(s)? Esta acción no se puede deshacer.`,
+      );
+      if (!ok) return;
+    }
+    await flushInspectorIfNeeded();
+    mdImporting = true;
+    mdImportError = null;
+    globalError = null;
+    try {
+      blocks = await importMarkdownBlocksToSection(
+        selectedSectionId,
+        mdImportText,
+        mdImportMode,
+        blocks,
+      );
+      showMdImportModal = false;
+      selectedBlockId = null;
+      syncSectionToInspector();
+    } catch (e) {
+      mdImportError = e instanceof Error ? e.message : String(e);
+    } finally {
+      mdImporting = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -619,6 +714,115 @@
   </div>
 {/if}
 
+{#if showMdImportModal}
+  <div class="overlay" role="dialog" aria-modal="true" aria-labelledby="md-import-title">
+    <div class="modal modal--md-import">
+      <div class="modal-header">
+        <h3 id="md-import-title" class="modal-title">Importar Markdown</h3>
+        <button type="button" class="modal-close" onclick={closeMdImportModal} disabled={mdImporting}>✕</button>
+      </div>
+      <div class="modal-form modal-form--flush">
+        <p class="modal-hint modal-hint--insert">
+          Solo afecta a la sección actual. No se crean secciones nuevas desde <code class="md-code">#</code>.
+          Reglas: <code class="md-code">#</code> / <code class="md-code">##</code>, párrafos (línea en blanco), <code class="md-code">&gt;</code> cita,
+          <code class="md-code">---</code>, <code class="md-code">[[PAGE_BREAK]]</code>, <code class="md-code">![alt](ruta)</code>.
+        </p>
+
+        {#if mdImportError}
+          <div class="alert alert--error">{mdImportError}</div>
+        {/if}
+
+        <div class="form-field">
+          <label class="form-label" for="md-paste">Pegar Markdown</label>
+          <textarea
+            id="md-paste"
+            class="form-textarea md-import-textarea"
+            bind:value={mdImportText}
+            disabled={mdImporting}
+            placeholder="# Capítulo en esta sección&#10;&#10;Párrafo uno.&#10;&#10;## Subtítulo&#10;&#10;> Una cita&#10;&#10;---&#10;&#10;[[PAGE_BREAK]]"
+            rows={10}
+          ></textarea>
+        </div>
+
+        <div class="form-field form-field--row-md">
+          <input
+            bind:this={mdFileInput}
+            type="file"
+            accept=".md,.markdown,text/markdown,text/plain"
+            class="sr-only"
+            onchange={onMdFileChange}
+          />
+          <button
+            type="button"
+            class="btn btn--ghost btn--sm"
+            disabled={mdImporting}
+            onclick={() => mdFileInput?.click()}
+          >
+            Cargar archivo .md
+          </button>
+        </div>
+
+        <div class="form-field">
+          <span class="form-label">Inserción</span>
+          <div class="md-import-mode">
+            <label class="md-radio">
+              <input type="radio" name="md-mode" value="append" bind:group={mdImportMode} disabled={mdImporting} />
+              <span>Agregar al final</span>
+            </label>
+            <label class="md-radio">
+              <input type="radio" name="md-mode" value="replace" bind:group={mdImportMode} disabled={mdImporting} />
+              <span>Reemplazar bloques actuales</span>
+            </label>
+          </div>
+        </div>
+
+        {#if mdImportPreview}
+          <div class="md-import-preview">
+            <div class="md-import-preview-title">Vista previa</div>
+            <p class="md-import-preview-meta">
+              <strong>{mdImportPreview.blockCount}</strong> bloque(s) ·
+              {#each Object.entries(mdImportPreview.byType) as [t, n], j (t)}
+                {j > 0 ? ' · ' : ''}{previewBlockTypeLabel(t)}: {n}
+              {/each}
+            </p>
+            <ul class="md-import-preview-list">
+              {#each mdImportPreview.samples as s, idx (idx)}
+                <li>
+                  <span class="md-import-preview-type">{blockTypeLabel(s.type)}</span>
+                  <span class="md-import-preview-excerpt">{s.excerpt}</span>
+                </li>
+              {/each}
+            </ul>
+            {#if mdImportPreview.blockCount > mdImportPreview.samples.length}
+              <p class="md-import-preview-more">… y {mdImportPreview.blockCount - mdImportPreview.samples.length} más</p>
+            {/if}
+          </div>
+        {:else if mdImportText.trim()}
+          <p class="modal-hint">No se detectaron bloques con el contenido actual.</p>
+        {/if}
+
+        <div class="modal-actions modal-actions--stack">
+          <button
+            type="button"
+            class="btn btn--primary btn--full"
+            disabled={mdImporting || !mdImportPreview}
+            onclick={() => confirmMdImport()}
+          >
+            {#if mdImporting}
+              <span class="spinner-sm"></span> Importando…
+            {:else}
+              Confirmar importación
+            {/if}
+          </button>
+          <button type="button" class="btn btn--ghost btn--full" disabled={mdImporting} onclick={closeMdImportModal}>
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <!-- ── Página principal ─────────────────────────────────────────────────── -->
 <div class="content-page">
 
@@ -748,16 +952,27 @@
           </h2>
           <span class="blocks-section-badge">{sectionTypeLabel(selectedSection.sectionType)}</span>
         </div>
-        <button
-          type="button"
-          class="btn btn--sm btn--primary"
-          onclick={openInsertBlockModal}
-          disabled={loadingBlocks}
-          title="Añadir un bloque nuevo"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          Insertar
-        </button>
+        <div class="blocks-header-actions">
+          <button
+            type="button"
+            class="btn btn--sm btn--ghost"
+            onclick={openMdImportModal}
+            disabled={loadingBlocks}
+            title="Importar Markdown en esta sección"
+          >
+            Importar Markdown
+          </button>
+          <button
+            type="button"
+            class="btn btn--sm btn--primary"
+            onclick={openInsertBlockModal}
+            disabled={loadingBlocks}
+            title="Añadir un bloque nuevo"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Insertar
+          </button>
+        </div>
       </div>
 
       <!-- Cuerpo del panel de bloques -->
@@ -772,7 +987,7 @@
               <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
             </svg>
             <p class="empty-write-title">Empieza a escribir esta sección</p>
-            <p class="empty-write-hint">Añade un párrafo, un título o una cita. También puedes usar <strong>Insertar</strong> arriba. Reordena y refina cuando quieras.</p>
+            <p class="empty-write-hint">Añade un párrafo, un título o una cita; usa <strong>Importar Markdown</strong> o <strong>Insertar</strong> arriba. Reordena y refina cuando quieras.</p>
             <div class="empty-write-actions">
               <select class="quick-type-select quick-type-select--solo" bind:value={quickBlockType} disabled={addingBlock}>
                 {#each ALL_BLOCK_TYPES as t}
@@ -1425,6 +1640,13 @@
     text-overflow: ellipsis;
   }
 
+  .blocks-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
   .blocks-body {
     flex: 1;
     min-height: 0;
@@ -1903,6 +2125,11 @@
     color-scheme: dark;
   }
 
+  .modal--md-import {
+    max-width: 520px;
+    color-scheme: dark;
+  }
+
   .modal-form--flush {
     gap: 14px;
   }
@@ -1938,6 +2165,124 @@
 
   .modal-hint--insert {
     margin: -6px 0 0;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .md-code {
+    font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+    font-size: 0.92em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.08);
+    color: rgba(200,220,255,0.95);
+  }
+
+  .md-import-textarea {
+    min-height: 200px;
+    font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .form-field--row-md {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: -4px;
+  }
+
+  .md-import-mode {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .md-radio {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: rgba(255,255,255,0.78);
+    cursor: pointer;
+  }
+
+  .md-radio input {
+    accent-color: #7ab8e8;
+  }
+
+  .md-import-preview {
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .md-import-preview-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.42);
+    margin: 0 0 8px;
+  }
+
+  .md-import-preview-meta {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    margin: 0 0 10px;
+    line-height: 1.45;
+  }
+
+  .md-import-preview-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  .md-import-preview-list li {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .md-import-preview-type {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(122,184,232,0.9);
+    min-width: 5.5rem;
+  }
+
+  .md-import-preview-excerpt {
+    color: rgba(255,255,255,0.55);
+    word-break: break-word;
+  }
+
+  .md-import-preview-more {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    margin: 8px 0 0;
   }
 
   .modal-actions--stack {

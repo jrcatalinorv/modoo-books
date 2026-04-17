@@ -33,6 +33,18 @@ export {
 } from '$lib/core/editorial/section-type-catalog';
 
 import { sectionTypeLabel } from '$lib/core/editorial/section-type-catalog';
+import {
+  parseMarkdownToBlockDrafts,
+  validateMarkdownForImport,
+} from '$lib/core/editorial/markdown-to-blocks';
+
+export {
+  parseMarkdownToBlockDrafts,
+  validateMarkdownForImport,
+  buildMarkdownImportPreview,
+  type MarkdownBlockDraft,
+  type MarkdownImportPreview,
+} from '$lib/core/editorial/markdown-to-blocks';
 
 // ─── Secciones ────────────────────────────────────────────────────────────────
 
@@ -143,6 +155,46 @@ export async function updateBlock(
 
 export async function deleteBlock(id: string): Promise<boolean> {
   return getPlatformAdapter().deleteBlock(id);
+}
+
+export type MarkdownImportMode = 'append' | 'replace';
+
+/**
+ * Importa Markdown en una sección: parsea, opcionalmente borra bloques existentes
+ * y crea bloques en orden vía la capa de persistencia.
+ */
+export async function importMarkdownBlocksToSection(
+  sectionId: string,
+  markdown: string,
+  mode: MarkdownImportMode,
+  currentBlocks: DocumentBlock[],
+): Promise<DocumentBlock[]> {
+  const v = validateMarkdownForImport(markdown);
+  if (!v.ok) throw new Error(v.message);
+
+  const drafts = parseMarkdownToBlockDrafts(markdown);
+  if (drafts.length === 0) {
+    throw new Error(
+      'No se detectaron bloques. Revisa el formato (párrafos, títulos #/##, citas >, ---, [[PAGE_BREAK]], etc.).',
+    );
+  }
+
+  if (mode === 'replace') {
+    const sorted = [...currentBlocks].sort((a, b) => a.orderIndex - b.orderIndex);
+    for (const b of sorted) {
+      await deleteBlock(b.id);
+    }
+  }
+
+  for (const d of drafts) {
+    await createBlock({
+      sectionId,
+      blockType:   d.blockType,
+      contentText: d.contentText,
+    });
+  }
+
+  return listBlocks(sectionId);
 }
 
 /**
